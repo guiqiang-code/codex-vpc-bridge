@@ -183,6 +183,21 @@ k() {
     fi
 
     _tmux_session_by_number "$1" || return
+
+    local answer
+    printf "Kill tmux session '%s'? [Y/n] " "$TMUX_SESSION_NAME"
+    if ! IFS= read -r answer; then
+        printf '%s\n' 'Confirmation unavailable; kill canceled.' >&2
+        return 2
+    fi
+    case "$answer" in
+        ''|[Yy]|[Yy][Ee][Ss]) ;;
+        *)
+            printf '%s\n' 'Kill canceled.'
+            return 0
+            ;;
+    esac
+
     command ssh target "tmux kill-session -t $TMUX_SESSION_NAME" || return
     l
 }

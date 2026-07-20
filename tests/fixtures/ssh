@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -eu
+
+: "${FAKE_SSH_LOG:?FAKE_SSH_LOG is required}"
+
+arguments=$*
+case "$arguments" in
+    *"list-sessions -F"*)
+        printf '%s\n' 'pop-dev1' 'frontend-dev'
+        ;;
+    *"kill-session"*)
+        printf '%s\n' "$arguments" >> "$FAKE_SSH_LOG"
+        ;;
+    *"list-sessions"*)
+        printf '%s\n' 'pop-dev1: 1 windows' 'frontend-dev: 1 windows'
+        ;;
+    *)
+        printf 'Unexpected fake ssh arguments: %s\n' "$arguments" >&2
+        exit 2
+        ;;
+esac

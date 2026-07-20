@@ -207,6 +207,12 @@ function global:k {
         return
     }
 
+    $answer = Read-Host "Kill tmux session '$session'? [Y/n]"
+    if ($answer -ne '' -and $answer -notmatch '^(y|yes)$') {
+        Write-Host "Kill canceled."
+        return
+    }
+
     & ssh target "tmux kill-session -t $session"
     if ($LASTEXITCODE -eq 0) {
         l

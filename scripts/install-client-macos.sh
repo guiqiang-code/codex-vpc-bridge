@@ -144,6 +144,10 @@ _tmux_session_by_number() {
     fi
 
     REPLY=${sessions[$1]}
+    if [[ -z "$REPLY" || "$REPLY" == *[^A-Za-z0-9_-]* ]]; then
+        print -u2 "Unsupported tmux session name: $REPLY"
+        return 2
+    fi
 }
 
 l() {
@@ -171,6 +175,20 @@ k() {
 
     _tmux_session_by_number "$1" || return
     local session=$REPLY
+
+    local answer
+    if ! read -r "answer?Kill tmux session '$session'? [Y/n] "; then
+        print -u2 'Confirmation unavailable; kill canceled.'
+        return 2
+    fi
+    case "$answer" in
+        ''|[Yy]|[Yy][Ee][Ss]) ;;
+        *)
+            print -r -- 'Kill canceled.'
+            return 0
+            ;;
+    esac
+
     command ssh target "tmux kill-session -t ${(q)session}" || return
     l
 }
