@@ -19,7 +19,8 @@ Before installing, diagnosing, or changing the project:
 - Mac client deployment: use `scripts/install-client-macos.sh`.
 - Windows client deployment: use `scripts/install-client-windows.ps1`.
 - Linux jump deployment: use `scripts/install-jump-linux.sh`.
-- End-to-end deployment: configure the client first, prepare SSH agent forwarding, then install on jump.
+- Linux target runtime deployment: use `scripts/install-target-linux.sh`.
+- End-to-end deployment: configure the client, prepare SSH agent forwarding, install on jump, then prepare target.
 
 Do not replace the scripts with hand-written SSH or shell configuration unless diagnosing a confirmed script defect.
 
@@ -30,6 +31,8 @@ Do not replace the scripts with hand-written SSH or shell configuration unless d
 - Do not modify cloud networking, security groups, firewalls, or sshd unless the user explicitly expands the task.
 - Preserve configuration outside the repository-managed marker blocks.
 - Do not create or kill real tmux sessions during installation verification.
+- Do not read or display Codex authentication caches, API keys, or access tokens.
+- On target, install only the packages declared by `scripts/install-target-linux.sh`.
 - Use read-only checks first when diagnosing connection failures.
 
 ## Completion rule

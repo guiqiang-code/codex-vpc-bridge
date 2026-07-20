@@ -22,8 +22,9 @@ flowchart LR
 2. 本地 `ssh target` 自动使用 `ProxyJump jump` 登录境外开发机。
 3. jump 上的 `ssh target` 通过私网地址登录境外开发机。
 4. 本地与 jump 均提供 `l`、`a`、`k`、`n` 四个 tmux 快捷命令。
-5. 本地私钥不复制到 jump；jump 默认通过 SSH agent forwarding 使用本地密钥。
-6. 重复执行安装脚本不会重复追加配置，也不会删除托管标记之外的用户配置。
+5. target 上已经安装 `tmux` 和 Codex CLI，并且能输出各自版本。
+6. 本地私钥不复制到 jump；jump 默认通过 SSH agent forwarding 使用本地密钥。
+7. 重复执行安装脚本不会重复追加配置，也不会删除托管标记之外的用户配置。
 
 ## 2. 设计意图
 
@@ -60,6 +61,7 @@ Agent 开始执行前必须获得或可靠发现以下值：
 | `TARGET` | 是 | `ubuntu@10.0.1.10` | jump 可访问的 target 私网地址 |
 | `IDENTITY_FILE` | 是 | `~/.ssh/id_rsa` | 本地私钥路径 |
 | `JUMP_PROFILE` | 否 | `~/.bashrc` | 不提供时由 Linux 脚本按 `$SHELL` 判断 |
+| `CODEX_METHOD` | 否 | `standalone` / `npm` | 默认使用官方 standalone 安装器 |
 
 规则：
 
@@ -79,7 +81,9 @@ Agent 必须遵守以下约束：
 5. 仅对用户明确指定且可信任的 jump 启用 agent forwarding。
 6. 不自动修改 `PasswordAuthentication`、`PermitRootLogin`、`LoginGraceTime` 或防火墙。
 7. 不自动创建或删除用户已有的 tmux 会话。
-8. SSH、路由或鉴权失败时，先做只读诊断；需要扩展权限或改变云资源时停止并报告。
+8. target 脚本只允许安装 `tmux`、`curl`、CA certificates 和 Codex CLI；不要借机安装其他开发环境。
+9. Codex 登录涉及用户账号或 API key，Agent 不得读取或回显认证凭据。
+10. SSH、路由或鉴权失败时，先做只读诊断；需要扩展权限或改变云资源时停止并报告。
 
 ## 5. 仓库内的执行入口
 
@@ -88,8 +92,10 @@ Agent 必须遵守以下约束：
 | Mac 客户端 | `scripts/install-client-macos.sh` | `~/.ssh/config`、`~/.zshrc` |
 | Windows 客户端 | `scripts/install-client-windows.ps1` | `%USERPROFILE%\.ssh\config`、PowerShell Profile |
 | Linux jump | `scripts/install-jump-linux.sh` | `~/.ssh/config`、`~/.bashrc` 或 `~/.zshrc` |
+| Linux target | `scripts/install-target-linux.sh` | 系统包、当前用户的 Codex CLI |
 
-三个脚本使用 `codex-vpc-bridge` 标记管理自己的配置块。重复执行必须替换已有托管块，并保留其他内容。
+客户端和 jump 脚本使用 `codex-vpc-bridge` 标记管理配置块。target 脚本按当前状态补齐或更新软件。
+所有脚本都必须可重复执行。
 
 ## 6. 标准执行流程
 
@@ -186,7 +192,59 @@ ssh jump "~/install-jump-linux.sh \
 
 Agent 不得主动上传本地私钥。
 
-### Phase E：端到端验证
+### Phase E：准备 target 开发环境
+
+target 发行版可能是 Ubuntu、Debian、CentOS、Rocky Linux、AlmaLinux、Fedora、SUSE、Alpine、
+Arch Linux 或其他 Linux。不要为每个发行版维护一套脚本；先运行统一的 POSIX `sh` 安装器：
+
+```bash
+scp scripts/install-target-linux.sh target:~/install-target-linux.sh
+ssh -t target 'chmod +x ~/install-target-linux.sh && sh ~/install-target-linux.sh'
+```
+
+脚本会：
+
+- 检测 apt、dnf、yum、zypper、apk 或 pacman。
+- 通过 sudo 安装缺失的 `tmux`、`curl` 和 CA certificates。
+- 以当前非 root 用户运行 OpenAI 官方 standalone 安装器。
+- 验证 `tmux -V`、`codex --version` 和 Codex 登录状态。
+
+识别包管理器只代表脚本知道怎样安装基础依赖，不代表 OpenAI 官方承诺支持该发行版。最终必须以
+`codex --version` 在 target 上真实运行成功为准；如果二进制与系统 libc、架构或内核不兼容，
+Agent 应报告具体兼容性边界，不得改用来源不明的第三方 Codex 包。
+
+官方当前推荐的 macOS/Linux 安装方式是
+[`curl -fsSL https://chatgpt.com/codex/install.sh | sh`](https://developers.openai.com/codex/cli)。
+仓库脚本先把安装器下载到临时文件，确认下载成功后再执行，避免管道前半段下载失败却被误判为成功。
+
+如果发行版的包管理器无法识别，Agent 应读取 `/etc/os-release`，用系统原生方式安装 `tmux`、
+`curl` 和 CA certificates，然后重新执行：
+
+```bash
+ssh -t target 'sh ~/install-target-linux.sh --skip-system-packages'
+```
+
+如果 target 无法访问 `chatgpt.com`，但已经有可用的 Node.js 和 npm，可以使用 OpenAI 官方
+支持的 npm 安装方式：
+
+```bash
+ssh -t target 'sh ~/install-target-linux.sh --codex-method npm'
+```
+
+不要用 `sudo npm install -g`。npm 全局目录权限错误应由 Agent 修复当前用户的 npm prefix，
+或者恢复使用 standalone 安装方式。
+
+target 是远程无桌面环境。Codex 未登录时，优先让用户在交互 SSH/tmux 中执行：
+
+```bash
+codex login --device-auth
+```
+
+设备码登录需要用户在浏览器完成确认，Agent 不得代替用户处理账号凭据。官方还支持 ChatGPT 登录
+和 API key 登录；认证方式以 [Codex Authentication](https://developers.openai.com/codex/auth)
+为准。
+
+### Phase F：端到端验证
 
 本地 SSH 配置解析：
 
@@ -209,7 +267,9 @@ Agent 至少确认：
 ssh jump hostname
 ssh target hostname
 ssh jump 'ssh target hostname'
-ssh target 'command -v tmux'
+ssh target 'tmux -V'
+ssh target 'codex --version'
+ssh target 'codex login status'
 ```
 
 快捷命令加载验证：
@@ -243,10 +303,12 @@ Agent 向用户解释 tmux 内操作时使用：
 
 - 客户端安装脚本成功退出。
 - jump 安装脚本成功退出。
+- target 安装脚本成功退出。
 - `ssh -G` 解析结果符合输入。
 - 本地可以执行只读命令到 jump 和 target。
 - jump 可以执行只读命令到 target。
-- target 上存在 `tmux`。
+- target 上的 `tmux -V` 和 `codex --version` 成功。
+- `codex login status` 已确认认证完成，或明确向用户报告“安装完成、认证待用户操作”。
 - 本地和 jump 均能加载 `l`、`a`、`k`、`n`。
 - 托管配置标记各只有一组。
 - 未把私钥或其他 secret 复制到 jump、写入仓库或输出到回复。
@@ -287,6 +349,21 @@ ssh jump 'test -n "$SSH_AUTH_SOCK" && ssh-add -l'
 
 Profile 写入不会自动改变已经启动的父 shell。使用新的交互 shell 进行验证，不要重复安装来碰运气。
 
+### target 包管理器不受支持
+
+读取 `/etc/os-release` 和发行版文档，只安装 `tmux`、`curl` 与 CA certificates。确认命令存在后，
+使用 `--skip-system-packages` 继续。不要为了覆盖一个小众发行版不断扩大脚本中的发行版特例。
+
+### Codex standalone 安装器无法下载
+
+先验证 target 是否能访问 `https://chatgpt.com/codex/install.sh`。如果只是该域名受限且系统已有
+Node.js/npm，可以改用 `--codex-method npm`；否则报告 target 出口网络问题，不要使用非官方镜像。
+
+### Codex 已安装但未登录
+
+这不是安装失败。远程无桌面环境优先使用 `codex login --device-auth`，并让用户完成浏览器确认。
+Agent 可以用 `codex login status` 验证结果，但不得读取或展示 `~/.codex/auth.json`。
+
 ## 10. Agent 最终报告格式
 
 完成部署后，用简短、可验证的格式回复：
@@ -295,6 +372,7 @@ Profile 写入不会自动改变已经启动的父 shell。使用新的交互 sh
 结果：完成 / 部分完成 / 未完成
 客户端：<OS 与写入的 Profile>
 链路：local -> jump -> target
+Target：<发行版、tmux 版本、Codex 版本、认证状态>
 验证：<已通过的 SSH 与命令检查>
 未修改：<云网络、sshd、私钥等>
 问题：<无，或具体失败点与下一步>
