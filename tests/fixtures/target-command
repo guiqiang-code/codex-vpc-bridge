@@ -1,0 +1,42 @@
+#!/bin/sh
+
+set -eu
+
+case "${0##*/}" in
+    uname)
+        case "${1:-}" in
+            -s) printf '%s\n' 'Linux' ;;
+            -m) printf '%s\n' 'x86_64' ;;
+            *) printf '%s\n' 'Linux' ;;
+        esac
+        ;;
+    id)
+        [ "${1:-}" = '-u' ] && printf '%s\n' '1000'
+        ;;
+    tmux)
+        [ "${1:-}" = '-V' ] && printf '%s\n' 'tmux 3.4'
+        ;;
+    codex)
+        case "$*" in
+            '--version'|'--strict-config --version')
+                printf '%s\n' 'codex-cli test'
+                ;;
+            'login status')
+                exit 1
+                ;;
+            *)
+                printf 'Unexpected fake codex arguments: %s\n' "$*" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    git)
+        printf '%s\n' 'git version test'
+        ;;
+    curl|node|npm)
+        ;;
+    *)
+        printf 'Unexpected target fixture command: %s\n' "${0##*/}" >&2
+        exit 2
+        ;;
+esac

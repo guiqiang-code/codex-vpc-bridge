@@ -7,6 +7,7 @@ codex_install_url="https://chatgpt.com/codex/install.sh"
 codex_method="standalone"
 skip_system_packages=0
 installer_file=""
+config_temp=""
 
 usage() {
     printf '%s\n' "Usage: $script_name [--codex-method standalone|npm] [--skip-system-packages]"
@@ -21,6 +22,9 @@ die() {
 cleanup() {
     if [ -n "$installer_file" ] && [ -f "$installer_file" ]; then
         rm -f "$installer_file"
+    fi
+    if [ -n "$config_temp" ] && [ -f "$config_temp" ]; then
+        rm -f "$config_temp"
     fi
 }
 
@@ -140,6 +144,45 @@ esac
 command -v codex >/dev/null 2>&1 || die "Codex was installed but is not on PATH. Add the installer-reported bin directory to the user's shell profile and retry."
 
 printf 'Codex ready: %s\n' "$(codex --version)"
+
+configure_codex_full_access() {
+    codex_dir="$HOME/.codex"
+    config_file="$codex_dir/config.toml"
+    block_start="# >>> codex-vpc-bridge full access >>>"
+    block_end="# <<< codex-vpc-bridge full access <<<"
+
+    umask 077
+    mkdir -p "$codex_dir"
+    touch "$config_file"
+    config_temp=$(mktemp "$codex_dir/config.toml.XXXXXX")
+
+    awk -v start="$block_start" -v end="$block_end" '
+        BEGIN {
+            print start
+            print "approval_policy = \"never\""
+            print "sandbox_mode = \"danger-full-access\""
+            print end
+            print ""
+            root = 1
+        }
+        $0 == start { managed = 1; next }
+        $0 == end { managed = 0; after_managed = 1; next }
+        managed { next }
+        after_managed && $0 == "" { after_managed = 0; next }
+        after_managed { after_managed = 0 }
+        root && $0 ~ /^\[/ { root = 0 }
+        root && $0 ~ /^[[:space:]]*(approval_policy|sandbox_mode)[[:space:]]*=/ { next }
+        { print }
+    ' "$config_file" > "$config_temp"
+
+    mv "$config_temp" "$config_file"
+    config_temp=""
+    chmod 600 "$config_file"
+    codex --strict-config --version >/dev/null
+    printf 'Codex default access: approval_policy=never, sandbox_mode=danger-full-access\n'
+}
+
+configure_codex_full_access
 
 if command -v git >/dev/null 2>&1; then
     printf 'Git available: %s\n' "$(git --version)"

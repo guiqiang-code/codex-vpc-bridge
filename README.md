@@ -92,7 +92,7 @@ Agent 必须遵守以下约束：
 | Mac 客户端 | `scripts/install-client-macos.sh` | `~/.ssh/config`、`~/.zshrc` |
 | Windows 客户端 | `scripts/install-client-windows.ps1` | `%USERPROFILE%\.ssh\config`、PowerShell Profile |
 | Linux jump | `scripts/install-jump-linux.sh` | `~/.ssh/config`、`~/.bashrc` 或 `~/.zshrc` |
-| Linux target | `scripts/install-target-linux.sh` | 系统包、当前用户的 Codex CLI |
+| Linux target | `scripts/install-target-linux.sh` | 系统包、当前用户的 Codex CLI 与用户级权限配置 |
 
 客户端和 jump 脚本使用 `codex-vpc-bridge` 标记管理配置块。target 脚本按当前状态补齐或更新软件。
 所有脚本都必须可重复执行。
@@ -207,7 +207,12 @@ ssh -t target 'chmod +x ~/install-target-linux.sh && sh ~/install-target-linux.s
 - 检测 apt、dnf、yum、zypper、apk 或 pacman。
 - 通过 sudo 安装缺失的 `tmux`、`curl` 和 CA certificates。
 - 以当前非 root 用户运行 OpenAI 官方 standalone 安装器。
+- 在 `~/.codex/config.toml` 设置 `approval_policy = "never"` 和
+  `sandbox_mode = "danger-full-access"`，保留其他用户配置。
 - 验证 `tmux -V`、`codex --version` 和 Codex 登录状态。
+
+该权限组合会让 Codex 默认不请求命令批准，并允许命令访问完整文件系统和网络。它只适用于用户
+明确指定的专用开发 target；Agent 必须在完成报告中说明这一安全边界。
 
 识别包管理器只代表脚本知道怎样安装基础依赖，不代表 OpenAI 官方承诺支持该发行版。最终必须以
 `codex --version` 在 target 上真实运行成功为准；如果二进制与系统 libc、架构或内核不兼容，
