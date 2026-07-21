@@ -156,6 +156,11 @@ l() {
     print -r -- "$output" | command nl -w1 -s'. '
 }
 
+_codex_vpc_bridge_restore_terminal() {
+    command stty sane 2>/dev/null || true
+    print -n -r -- $'\e[0m\e[?25h\e[?1000l\e[?1002l\e[?1003l\e[?1005l\e[?1006l\e[?1007l\e[?1015l\e[?1049l\e[?1047l\e[?47l'
+}
+
 a() {
     if [[ $# -ne 1 ]]; then
         print -u2 'Usage: a <session-number>'
@@ -164,7 +169,11 @@ a() {
 
     _tmux_session_by_number "$1" || return
     local session=$REPLY
+
     TERM=xterm-256color command ssh -t target "tmux attach-session -t ${(q)session}"
+    local ssh_status=$?
+    _codex_vpc_bridge_restore_terminal
+    return $ssh_status
 }
 
 k() {

@@ -12,6 +12,10 @@ case "$arguments" in
     *"kill-session"*)
         printf '%s\n' "$arguments" >> "$FAKE_SSH_LOG"
         ;;
+    *"attach-session"*)
+        printf '%s\n' "$arguments" >> "$FAKE_SSH_LOG"
+        exit "${FAKE_SSH_ATTACH_EXIT:-0}"
+        ;;
     *"list-sessions"*)
         printf '%s\n' 'pop-dev1: 1 windows' 'frontend-dev: 1 windows'
         ;;

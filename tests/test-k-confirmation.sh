@@ -78,6 +78,32 @@ assert_eof_cancels() {
     [ ! -s "$log_file" ] || fail "$shell_path: EOF unexpectedly killed a session"
 }
 
+assert_attach_restores_terminal() {
+    shell_path=$1
+    profile_path=$2
+    output_file="$test_root/attach-output"
+
+    reset_log
+    if HOME=$(dirname "$profile_path") \
+        PROFILE_PATH="$profile_path" \
+        FAKE_SSH_LOG="$log_file" \
+        FAKE_SSH_ATTACH_EXIT=23 \
+        PATH="$fake_bin:$PATH" \
+        "$shell_path" -c '. "$PROFILE_PATH"; a 1' > "$output_file"; then
+        fail "$shell_path: a discarded the failed SSH status"
+    else
+        status=$?
+    fi
+
+    [ "$status" -eq 23 ] || fail "$shell_path: a returned $status instead of SSH status 23"
+    grep -F 'tmux attach-session -t pop-dev1' "$log_file" >/dev/null ||
+        fail "$shell_path: a did not attach the selected session"
+    grep -F "$(printf '\033[?1000l')" "$output_file" >/dev/null ||
+        fail "$shell_path: a did not disable terminal mouse tracking"
+    grep -F "$(printf '\033[?1049l')" "$output_file" >/dev/null ||
+        fail "$shell_path: a did not leave the alternate screen"
+}
+
 bash_home="$test_root/bash-home"
 mkdir -p "$bash_home"
 HOME="$bash_home" SHELL=/bin/bash \
@@ -89,6 +115,7 @@ assert_single_managed_block "$bash_home/.bashrc"
 assert_default_kills /bin/bash "$bash_home/.bashrc"
 assert_no_cancels /bin/bash "$bash_home/.bashrc"
 assert_eof_cancels /bin/bash "$bash_home/.bashrc"
+assert_attach_restores_terminal /bin/bash "$bash_home/.bashrc"
 
 if command -v zsh >/dev/null 2>&1; then
     zsh_home="$test_root/zsh-home"
@@ -109,6 +136,7 @@ if command -v zsh >/dev/null 2>&1; then
     assert_default_kills "$(command -v zsh)" "$zsh_home/.zshrc"
     assert_no_cancels "$(command -v zsh)" "$zsh_home/.zshrc"
     assert_eof_cancels "$(command -v zsh)" "$zsh_home/.zshrc"
+    assert_attach_restores_terminal "$(command -v zsh)" "$zsh_home/.zshrc"
 fi
 
-printf '%s\n' 'PASS: k confirmation defaults to yes, honors no, and cancels on EOF'
+printf '%s\n' 'PASS: tmux shortcuts confirm kills and restore the terminal after attach'

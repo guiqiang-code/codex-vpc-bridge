@@ -178,6 +178,15 @@ function global:l {
     }
 }
 
+function global:Reset-CodexVpcBridgeTerminal {
+    try {
+        $escape = [char]27
+        [Console]::Out.Write("${escape}[0m${escape}[?25h${escape}[?1000l${escape}[?1002l${escape}[?1003l${escape}[?1005l${escape}[?1006l${escape}[?1007l${escape}[?1015l${escape}[?1049l${escape}[?1047l${escape}[?47l")
+    } catch {
+        # The SSH exit status remains more important than terminal cleanup diagnostics.
+    }
+}
+
 function global:a {
     param([string]$Number)
 
@@ -189,12 +198,16 @@ function global:a {
     }
 
     $previousTerm = $env:TERM
+    $sshExitCode = 0
     try {
         $env:TERM = 'xterm-256color'
         & ssh -t target "tmux attach-session -t $session"
+        $sshExitCode = $LASTEXITCODE
     } finally {
         $env:TERM = $previousTerm
+        Reset-CodexVpcBridgeTerminal
     }
+    $global:LASTEXITCODE = $sshExitCode
 }
 
 function global:k {

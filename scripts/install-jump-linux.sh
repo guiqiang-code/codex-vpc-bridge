@@ -166,6 +166,11 @@ l() {
     printf '%s\n' "$output" | nl -w1 -s'. '
 }
 
+_codex_vpc_bridge_restore_terminal() {
+    command stty sane 2>/dev/null || true
+    printf '\033[0m\033[?25h\033[?1000l\033[?1002l\033[?1003l\033[?1005l\033[?1006l\033[?1007l\033[?1015l\033[?1049l\033[?1047l\033[?47l'
+}
+
 a() {
     if [ "$#" -ne 1 ]; then
         printf '%s\n' 'Usage: a <session-number>' >&2
@@ -173,7 +178,11 @@ a() {
     fi
 
     _tmux_session_by_number "$1" || return
+
     TERM=xterm-256color command ssh -t target "tmux attach-session -t $TMUX_SESSION_NAME"
+    local ssh_status=$?
+    _codex_vpc_bridge_restore_terminal
+    return "$ssh_status"
 }
 
 k() {
